@@ -2,7 +2,6 @@
 
 # TODO
 #
-# - fire particles
 # - smooth turret rotation
 # - explosions and carcasses
 # - drag new turrets from menu
@@ -327,6 +326,40 @@ class HardAttacker(Attacker):
                       HardAttacker.SPEED,
                       HardAttacker.VALUE)
 
+class Shot(pygame.sprite.Sprite):
+  sound_hit = None
+  
+  def __init__(self, shooter, target, damage_ability):
+    if Shot.sound_hit is None:
+      Shot.sound_hit = load_sound('hit.wav')
+    self._layer = 6
+    pygame.sprite.Sprite.__init__(self, self.containers)
+    self.target = target
+    self.position = shooter.position
+    self.end_position = target.position
+    self.damage_ability = damage_ability
+
+    self.image = pygame.Surface((2, 2)).convert()
+    self.image.fill((255, 255, 0))
+    self.rect = self.image.get_rect(center=self.position)
+
+    self.vector = (Vec2d(self.end_position) - Vec2d(self.position)).normalized()
+    
+    self.lifetime = 1000
+
+  def update(self, dt):
+    self.lifetime -= dt
+    self.position += self.vector * (4.0 * float(dt) / float(FPS))
+    self.rect.center = self.position
+    if self.rect.colliderect(self.target.rect):
+      if self.target.alive():
+        self.sound_hit.play()
+        self.target.inflict_damage(self.damage_ability)
+      self.kill()
+    else:
+      if self.lifetime <= 0:
+        self.kill()
+
 class Turret(pygame.sprite.Sprite):
   def __init__(self, position, game, image, sound_shot,
                fire_rate=1000.0,
@@ -344,6 +377,8 @@ class Turret(pygame.sprite.Sprite):
     self.original_image = self.image
 
     self.angle_degrees = 0
+    self.target_angle_degrees = 0
+    self.__locked_enemy = None
 
     self.fire_countdown = random.randint(50, 500)
     self.fire_rate = fire_rate
@@ -355,8 +390,17 @@ class Turret(pygame.sprite.Sprite):
   def die(self):
     self.kill()
 
+  def fire(self, enemy):
+    self.sound_shot.play()
+    shot = Shot(self, enemy, self.damage_ability)
+
+  def lock_target(self, enemy):
+    self.__locked_enemy = enemy
+    vector = (Vec2d(self.position) - Vec2d(enemy.position)).normalized()
+    self.target_angle_degrees = - vector.get_angle()
+    
   def check_enemy_collisions(self, dt):
-    if self.fire_countdown > 0:
+    if self.fire_countdown > 0 and not self.__locked_enemy:
       self.fire_countdown -= dt
       return
 
@@ -367,13 +411,19 @@ class Turret(pygame.sprite.Sprite):
                                                  collision_func)
     if len(nearby_enemies) > 0:
       enemy = nearby_enemies[0]
+      self.lock_target(enemy)
       self.fire_countdown = self.fire_rate
-      self.sound_shot.play()
-      enemy.inflict_damage(self.damage_ability)
-      vector = (Vec2d(self.position) - Vec2d(enemy.position)).normalized()
-      self.angle_degrees = - vector.get_angle()
 
   def update(self, dt):
+    if self.__locked_enemy:
+      angle_delta = self.angle_degrees - self.target_angle_degrees
+      if abs(angle_delta) < 10:
+        self.fire(self.__locked_enemy)
+        self.__locked_enemy = None
+      else:
+        dr = angle_delta / 1.5
+        dr *= (1.05 * float(dt) / float(FPS))
+        self.angle_degrees -= dr
     self.check_enemy_collisions(dt)
     rotate = pygame.transform.rotate
     self.image = rotate(self.original_image, self.angle_degrees)
@@ -627,6 +677,7 @@ class Game(object):
     Banner.containers = self.__foreground_sprites, self.__all_sprites
     GameOver.containers = self.__foreground_sprites, self.__all_sprites
     Wall.containers = self.__background_sprites, self.__all_sprites
+    Shot.containers = self.__background_sprites, self.__all_sprites
     Base.containers = self.__background_sprites, self.__all_sprites
     Turret.containers = self.__background_sprites, self.__all_sprites
     Attacker.containers = self.__enemy_sprites, self.__all_sprites
