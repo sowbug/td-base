@@ -2,7 +2,6 @@
 
 # TODO
 #
-# - smooth turret rotation
 # - explosions and carcasses
 # - drag new turrets from menu
 # - sell/upgrade menu
