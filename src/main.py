@@ -24,12 +24,6 @@ ASSET_DIR = 'assets'
 TRANSPARENCY_KEY_COLOR = (255, 0, 255)
 
 FIELD_BACKGROUND_COLOR = (0, 192, 0)
-DASH_BACKGROUND_COLOR = (128, 128, 128)
-DASH_COLOR = (192, 192, 0)
-BANNER_ALPHA = 192
-BANNER_DURATION = 4000
-BANNER_FADE_IN_END = 3750
-BANNER_FADE_OUT_START = 1000
 
 SPAWN_ENEMY = pygame.USEREVENT
 BEGIN_LEVEL = pygame.USEREVENT + 1
@@ -52,46 +46,182 @@ def load_sound(name):
 
 class Base(pygame.sprite.Sprite):
   def __init__(self, position, game, is_exit=False):
-    pygame.sprite.Sprite.__init__(self)
+    self._layer = 8
+    pygame.sprite.Sprite.__init__(self, self.containers)
     self.game = game
     self.is_exit = is_exit
     self.image = pygame.image.load(os.path.join(ASSET_DIR, 'base.png'))
-    self.rect = self.image.get_rect()
     self.position = position
-    self.rect.center = position
+    self.rect = self.image.get_rect(center=position)
 
   def update(self, dt):
     pass
 
 class Wall(pygame.sprite.Sprite):
-  def __init__(self, position, game):
-    pygame.sprite.Sprite.__init__(self)
-    self.game = game
-    self.parent_group = game.environment_sprites
+  def __init__(self, position):
+    self._layer = 2
+    pygame.sprite.Sprite.__init__(self, self.containers)
     self.image = pygame.image.load(os.path.join(ASSET_DIR, 'wall.png'))
+    self.position = position
+    self.rect = self.image.get_rect(center=position)
+
+  def update(self, dt):
+    pass
+
+class Dashboard(pygame.sprite.Sprite):
+  BACKGROUND_COLOR = (128, 128, 128)
+  COLOR = (192, 192, 0)
+  
+  def __init__(self, position, game, font, line_count):
+    self._layer = 10
+    pygame.sprite.Sprite.__init__(self, self.containers)
+    self.game = game
+    self.font = font
+    self.line_count = line_count
+    self.line_height = self.font.get_height()
+    self.image = pygame.Surface((80, self.line_height * self.line_count)).convert()
+    self.rect = self.image.get_rect(topleft=position)
+
+  def update(self, dt):
+    cursor = (0, 0)
+
+    self.image.fill(Dashboard.BACKGROUND_COLOR)
+
+    str = '$%d, Lives %d' % (self.game.funds, self.game.lives)
+    text = self.font.render(str, 1, Dashboard.COLOR)
+    textpos = text.get_rect()
+    textpos.topleft = cursor
+    text.set_alpha(128)
+    self.image.blit(text, textpos)
+    cursor = (cursor[0], cursor[1] + self.line_height)
+
+    str = 'Level %d' % (self.game.level + 1)
+    text = self.font.render(str, 1, Dashboard.COLOR)
+    textpos = text.get_rect()
+    textpos.topleft = cursor
+    text.set_alpha(128)
+    self.image.blit(text, textpos)
+    cursor = (cursor[0], cursor[1] + self.line_height)
+
+class Cursor(pygame.sprite.Sprite):
+  def __init__(self):
+    self._layer = 4
+    pygame.sprite.Sprite.__init__(self, self.containers)
+    self.image = pygame.Surface((16, 16)).convert()
     self.rect = self.image.get_rect()
+
+  def set_valid_placement(self, is_valid):
+    if is_valid:
+      self.image.fill((0, 255, 0))
+    else:
+      self.image.fill((255, 0, 0))
+
+  def set_position(self, position):
     self.rect.center = position
 
   def update(self, dt):
     pass
 
+class GameOver(pygame.sprite.Sprite):
+  BACKGROUND_COLOR = (128, 128, 128)
+  COLOR = (192, 192, 0)
+  
+  def __init__(self, font):
+    self._layer = 10
+    pygame.sprite.Sprite.__init__(self, self.containers)
+    self.font = font
+    self.line_height = self.font.get_height()
+    self.image = pygame.Surface((SCREEN_SIZE_X,
+                                 self.line_height + 16)).convert()
+    self.rect = self.image.get_rect()
+
+    self.image.fill((0, 0, 192))
+    self.image.set_alpha(192)
+    text = self.font.render('Game Over', 1, (192, 0, 0))
+    textpos = text.get_rect(centerx=self.image.get_width() / 2)
+    textpos.top = 8
+    self.image.blit(text, textpos)
+    self.rect.topleft = (0,
+                         (SCREEN_SIZE_Y - self.rect.height) / 4)
+
+  def update(self, dt):
+    pass
+
+class Banner(pygame.sprite.Sprite):
+  enqueued_messages = []
+  current_banner = None
+  font = None
+  
+  ALPHA = 192
+  DURATION = 4000
+  FADE_IN_END = 3750
+  FADE_OUT_START = 1000
+
+  def __init__(self, message):
+    self._layer = 10
+    pygame.sprite.Sprite.__init__(self, self.containers)
+    self.line_height = Banner.font.get_height()
+    height = self.line_height + 16
+    self.image = pygame.Surface((SCREEN_SIZE_X, height))
+    self.rect = self.image.get_rect(topleft=(0, (SCREEN_SIZE_Y - height) / 4))
+    self.image.fill((0, 0, 192))
+    text = Banner.font.render(message, 1, (255, 255, 0))
+    textpos = text.get_rect(centerx=self.rect.width / 2)
+    textpos.top = 8
+    self.image.blit(text, textpos)
+    self.countdown = 4000
+
+  def tick(dt):
+    if not Banner.current_banner:
+      try:
+        message = Banner.enqueued_messages.pop(0)
+        if message:
+          Banner.current_banner = Banner(message)
+      except IndexError:
+        pass
+      return
+  tick = staticmethod(tick)
+
+  def update(self, dt):
+    self.countdown -= dt
+    if self.countdown <= 0:
+      self.kill()
+      Banner.current_banner = None
+    else:
+      alpha = float(Banner.ALPHA)
+      if self.countdown > Banner.FADE_IN_END:
+        alpha *= (float(Banner.DURATION - self.countdown) / 
+                  float(Banner.DURATION - Banner.FADE_IN_END))
+      elif self.countdown < Banner.FADE_OUT_START:
+        alpha *= (float(self.countdown) / Banner.FADE_OUT_START)
+      self.image.set_alpha(int(alpha))
+
+  def enqueue_message(message):
+    Banner.enqueued_messages.append(message)
+  enqueue_message = staticmethod(enqueue_message)
+
+  def reset():
+    Banner.enqueued_messages = []
+    if Banner.current_banner:
+      Banner.current_banner.kill()
+      Banner.current_banner = None
+  reset = staticmethod(reset)
+
 class Attacker(pygame.sprite.Sprite):
   def __init__(self, position, game, image, sound_explosion,
                health, speed, value):
-    pygame.sprite.Sprite.__init__(self)
-    self.game = game
-    self.parent_group = game.enemy_sprites
+    self._layer = 5
+    pygame.sprite.Sprite.__init__(self, self.containers)
     self.image = image
     self.sound_explosion = sound_explosion
-    self.rect = image.get_rect()
-    self.original_image = self.image
     self.position = position
-    self.rect.center = position
+    self.rect = self.image.get_rect(center=position)
+    self.original_image = self.image
     self.game = game
     self.angle_degrees = 0
-    self.starting_health = health * game.get_level_multiplier()
+    self.starting_health = health * game.level_multiplier
     self.health = self.starting_health
-    self.speed = speed * game.get_level_multiplier()
+    self.speed = speed * game.level_multiplier
     self.value = value
     
     self.recalculate_goal_position()
@@ -109,7 +239,7 @@ class Attacker(pygame.sprite.Sprite):
     print 'ERROR: attacker got stuck!'
 
   def die(self):
-    self.game.kill_actor_sprite(self)
+    self.kill()
     self.game.notify_enemy_sprite_change()
 
   def inflict_damage(self, points):
@@ -204,17 +334,15 @@ class Turret(pygame.sprite.Sprite):
                damage_ability=5.0,
                cost=0.0,
                splash=False):
-    pygame.sprite.Sprite.__init__(self)
+    self._layer = 5
+    pygame.sprite.Sprite.__init__(self, self.containers)
     self.game = game
-    self.parent_group = game.environment_sprites
     self.image = image
     self.sound_shot = sound_shot
-    self.rect = image.get_rect()
-    self.original_image = self.image
     self.position = position
-    self.rect.center = position
+    self.rect = self.image.get_rect(center=position)
+    self.original_image = self.image
 
-    self.game = game
     self.angle_degrees = 0
 
     self.fire_countdown = random.randint(50, 500)
@@ -225,7 +353,7 @@ class Turret(pygame.sprite.Sprite):
     self.value = int(cost * 0.8)
 
   def die(self):
-    self.game.kill_actor_sprite(self)
+    self.kill()
 
   def check_enemy_collisions(self, dt):
     if self.fire_countdown > 0:
@@ -444,6 +572,20 @@ class Grid(object):
     path.reverse()
     return path
 
+  def is_ok_to_place(self, entry_pos, exit_pos, pos):
+    col, row = self.screen_to_grid(pos)
+    contents = self.get_cell(col, row)
+    if contents:
+      return False
+    try:
+      self.set_cell(col, row, 0xdeadbeef)
+      if self.find_path(entry_pos, exit_pos) is not None:
+        return True
+      else:
+        return False
+    finally:
+      self.set_cell(col, row, None)
+
 class Game(object):
 
   EASY, HARD = (0, 1) 
@@ -468,23 +610,51 @@ class Game(object):
     app_icon = pygame.image.load(os.path.join(ASSET_DIR, 'application.png'))
     app_icon_rect = app_icon.get_rect()
     pygame.display.set_icon(app_icon)
-    self.__screen = pygame.display.set_mode((SCREEN_SIZE_X, SCREEN_SIZE_Y))
     pygame.display.set_caption(self.__application_name)
     pygame.mouse.set_visible(True)
-    
+
     self.__small_font = get_font(14)
     self.__big_font = get_font(36)
-    
-    self.generate_game_over_image()
-    self.__banner_image = None
-    self.__banner_countdown = 0
-    self.__banner_alpha = 0
-    self.__enqueued_banner_messages = []
+    Banner.font = self.__big_font
 
+    self.__background_sprites = pygame.sprite.RenderUpdates()
+    self.__enemy_sprites = pygame.sprite.RenderUpdates()
+    self.__foreground_sprites = pygame.sprite.RenderUpdates()
+    self.__all_sprites = pygame.sprite.LayeredUpdates()
+
+    Dashboard.containers = self.__foreground_sprites, self.__all_sprites
+    Cursor.containers = self.__background_sprites, self.__all_sprites
+    Banner.containers = self.__foreground_sprites, self.__all_sprites
+    GameOver.containers = self.__foreground_sprites, self.__all_sprites
+    Wall.containers = self.__background_sprites, self.__all_sprites
+    Base.containers = self.__background_sprites, self.__all_sprites
+    Turret.containers = self.__background_sprites, self.__all_sprites
+    Attacker.containers = self.__enemy_sprites, self.__all_sprites
+
+    self.create_environment()
+
+    self.__bases = [Base(self.__grid.grid_to_screen(self.__entry_grid_pos),
+                         self),
+                    Base(self.__grid.grid_to_screen(self.__exit_grid_pos),
+                         self, is_exit=True)]
+    for base in self.__bases:
+      self.__grid.set_cell(base.position[0], base.position[1], base)    
+
+    self.__sound_victory = load_sound('victory.wav')
+
+    self.__cursor = None
+
+    self.start_game()
+
+  def start_game(self):
+    self.__level = 0
     self.__funds = 10
     self.__lives = 10
     self.__game_over = False
+    pygame.time.set_timer(BEGIN_LEVEL, 5000)
+    Banner.reset()
 
+  def create_environment(self):
     TILE_SIZE = 16
     GRAPH_COL = SCREEN_SIZE_X / TILE_SIZE
     GRAPH_ROW = SCREEN_SIZE_Y / TILE_SIZE
@@ -492,42 +662,220 @@ class Game(object):
     self.__entry_grid_pos = (1, GRAPH_ROW / 2)
     self.__exit_grid_pos = (GRAPH_COL - 2, GRAPH_ROW / 2)
 
-    self.__environment_sprites = pygame.sprite.Group()
     for row in range(0, GRAPH_ROW):
       if row == 0 or row == GRAPH_ROW - 1:
         step = 1
       else:
         step = GRAPH_COL - 1
       for col in range(0, GRAPH_COL, step):
-        wall = Wall(self.__grid.grid_to_screen((col, row)), self)
+        wall = Wall(self.__grid.grid_to_screen((col, row)))
         self.__grid.set_cell(col, row, wall)
-        self.__environment_sprites.add(wall)
-
-    self.__bases = [Base(self.__grid.grid_to_screen(self.__entry_grid_pos),
-                         self),
-                    Base(self.__grid.grid_to_screen(self.__exit_grid_pos),
-                         self, is_exit=True)]
-    self.__environment_sprites.add(self.__bases)
-    for base in self.__bases:
-      self.__grid.set_cell(base.position[0], base.position[1], base)    
 
     self.regenerate_path()
 
-    self.__enemy_sprites = pygame.sprite.Group([])
-    self.__enemy_sprites.needs_draw_call = True
+  def begin_level(self):
+    Banner.enqueue_message('Starting Level %d' % (self.__level + 1))
+    self.__level_multiplier = Game.LEVELS[self.__level][0]
+    self.__level_enemy_lineup = Game.LEVELS[self.__level][1]
+    self.__level_enemy_lineup_index = 0
+    self.enemy_lineup_complete = False
+    pygame.time.set_timer(SPAWN_ENEMY, 2000)
 
-    self.__background = pygame.Surface(self.__screen.get_size()).convert()
-    self.__background.fill(FIELD_BACKGROUND_COLOR)
+  def end_level(self):
+    self.__level += 1
+    if self.__level >= len(Game.LEVELS):
+      self.__sound_victory.play()
+      self.__game_over = True
+      Banner.enqueue_message('You Win!')
+    else:
+      pygame.time.set_timer(BEGIN_LEVEL, 3000)
 
-    self.__sprite_groups = [self.__environment_sprites,
-                            self.__enemy_sprites]
-    
-    self.__sound_victory = load_sound('victory.wav')
+  def regenerate_path(self):
+    path = self.__grid.find_path(self.__entry_grid_pos, self.__exit_grid_pos)
+    if not path:
+      print 'ERROR! We ended up with a dead end.'
+    else:
+      self.__path_map = PathMap(path) 
 
-    self.__cursor_grid_pos = None
-    
-    self.__level = 0
-    pygame.time.set_timer(BEGIN_LEVEL, 5000)
+  def award_kill(self, value):
+    self.__funds += value
+
+  def notify_enemy_sprite_change(self):
+    if (len(self.__enemy_sprites.sprites()) == 0 and
+        self.enemy_lineup_complete):
+      print 'level %d complete' % self.__level
+      self.end_level()
+
+  def deduct_life(self):
+    self.__lives -= 1
+    if self.__lives <= 0:
+      self.__game_over = True
+
+  def get_next_enemy_type(self):
+    if self.__level_enemy_lineup_index < len(self.__level_enemy_lineup):
+      next_enemy = self.__level_enemy_lineup[self.__level_enemy_lineup_index]
+      self.__level_enemy_lineup_index += 1
+      return next_enemy
+    self.enemy_lineup_complete = True
+    return None
+
+  def get_enemy_spawn_rate(self):
+    return 500
+
+  def spawn(self):
+    pos = self.__grid.grid_to_screen(self.__entry_grid_pos)
+    enemy_type = self.get_next_enemy_type()
+    if enemy_type is None:
+      return
+    pygame.time.set_timer(SPAWN_ENEMY, self.get_enemy_spawn_rate())
+    if enemy_type == Game.EASY:
+      attacker = EasyAttacker(pos, self)
+    elif enemy_type == Game.HARD:
+      attacker = HardAttacker(pos, self)
+    else:
+      print 'NO ENEMY SPAWNED!'
+
+  def add_turret(self, grid_position):
+    col, row = grid_position[0], grid_position[1]
+    turret = None
+    if random.randint(0, 2) == 0:
+      if self.funds >= SmallTurret.COST:
+        turret = SmallTurret(self.__grid.grid_to_screen((col, row)), self)
+    else:
+      if self.funds >= BigTurret.COST:
+        turret = BigTurret(self.__grid.grid_to_screen((col, row)), self)
+    if turret is not None:
+      self.funds -= turret.COST
+      self.__grid.set_cell(col, row, turret)
+      self.regenerate_path()
+
+  def remove_turret(self, pos):
+    col, row = pos[0], pos[1]
+    contents = self.__grid.get_cell(col, row)
+    if isinstance(contents, Turret):
+      contents.kill()
+      self.__grid.set_cell(col, row, None)
+      self.regenerate_path()
+      self.funds += contents.value
+
+  def handle_mouseup(self, pos):
+    col, row = self.__grid.screen_to_grid(pos)
+    contents = self.__grid.get_cell(col, row)
+    if not contents:
+      self.add_turret((col, row))
+      return
+    if isinstance(contents, Wall):
+      return
+    if isinstance(contents, Turret):
+      self.remove_turret((col, row))
+      return
+    print 'huh?'
+
+  def handle_mousemotion(self, pos):
+    col, row = self.__grid.screen_to_grid(pos)
+    contents = self.__grid.get_cell(col, row)
+    if not contents:
+      if not self.__cursor:
+        cursor = Cursor()
+        self.__cursor = cursor
+      self.__cursor.set_position(self.__grid.grid_to_screen((col, row)))
+      is_valid = self.__grid.is_ok_to_place(self.__entry_grid_pos,
+                                            self.__exit_grid_pos,
+                                            pos)
+      self.__cursor.set_valid_placement(is_valid)
+    else:
+      if self.__cursor:
+        self.__cursor.kill()
+        self.__cursor = None
+
+  def handle_events(self):
+    for event in pygame.event.get():
+      if event.type == QUIT:
+        return True
+      elif event.type == KEYDOWN and event.key == K_ESCAPE:
+        return True
+      elif event.type == MOUSEBUTTONUP:
+        self.handle_mouseup(event.pos)
+      elif event.type == MOUSEMOTION:
+        self.handle_mousemotion(event.pos)
+      elif event.type == SPAWN_ENEMY:
+        pygame.time.set_timer(SPAWN_ENEMY, 0)
+        self.spawn()
+      elif event.type == BEGIN_LEVEL:
+        pygame.time.set_timer(BEGIN_LEVEL, 0)
+        self.begin_level()
+    return False
+
+  def run(self):
+    screen = pygame.display.set_mode((SCREEN_SIZE_X, SCREEN_SIZE_Y))
+    background = pygame.Surface(screen.get_size()).convert()
+    background.fill(FIELD_BACKGROUND_COLOR)
+    screen.blit(background, background.get_rect())
+    pygame.display.update()
+
+    dashboard = Dashboard((5, SCREEN_SIZE_Y - 40), self, self.__small_font, 2)
+    game_over = None
+
+    while True:
+      elapsed = self.__clock.tick(FPS)
+      if not self.__game_over:
+        Banner.tick(elapsed)
+
+      if self.handle_events():
+        return
+
+      if not self.__game_over:
+        self.__all_sprites.update(elapsed)
+
+      self.__all_sprites.clear(screen, background)
+      dirty = self.__all_sprites.draw(screen)
+      for sprite in self.__enemy_sprites:
+        sprite.draw(screen)
+
+      if self.__game_over:
+        if not game_over:
+          game_over = GameOver(self.__big_font)
+          if Banner.current_banner:
+            Banner.current_banner.kill()
+            Banner.current_banner = None
+
+      pygame.display.update(dirty)
+
+  def getFunds(self):
+      return self.__funds
+
+  def getLives(self):
+      return self.__lives
+
+  def getLevel(self):
+      return self.__level
+
+  def setFunds(self, value):
+      self.__funds = value
+
+  def setLives(self, value):
+      self.__lives = value
+
+  def setLevel(self, value):
+      self.__level = value
+
+  def delFunds(self):
+      del self.__funds
+
+  def delLives(self):
+      del self.__lives
+
+  def delLevel(self):
+      del self.__level
+
+  def getEnemy_sprites(self):
+      return self.__enemy_sprites
+
+  def setEnemy_sprites(self, value):
+      self.__enemy_sprites = value
+
+  def delEnemy_sprites(self):
+      del self.__enemy_sprites
 
   def getGrid(self):
       return self.__grid
@@ -538,23 +886,6 @@ class Game(object):
   def delGrid(self):
       del self.__grid
 
-  def begin_level(self):
-    self.enqueue_banner_message('Starting Level %d' % (self.__level + 1))
-    self.level_multiplier = Game.LEVELS[self.__level][0]
-    self.level_enemy_lineup = Game.LEVELS[self.__level][1]
-    self.level_enemy_lineup_index = 0
-    self.enemy_lineup_complete = False
-    pygame.time.set_timer(SPAWN_ENEMY, 2000)
-
-  def end_level(self):
-    self.__level += 1
-    if self.__level >= len(Game.LEVELS):
-      self.__sound_victory.play()
-      self.__game_over = True
-      self.enqueue_banner_message('You Win!')
-    else:
-      pygame.time.set_timer(BEGIN_LEVEL, 3000)
-    
   def getFunds(self):
       return self.__funds
 
@@ -582,284 +913,25 @@ class Game(object):
   def delPath_map(self):
       del self.__path_map
 
-  def regenerate_path(self):
-    path = self.__grid.find_path(self.__entry_grid_pos, self.__exit_grid_pos)
-    if not path:
-      print 'ERROR! We ended up with a dead end.'
-    else:
-      self.__path_map = PathMap(path) 
-
-  def getEnvironment_sprites(self):
-      return self.__environment_sprites
-
   def getBases(self):
       return self.__bases
-
-  def getEnemy_sprites(self):
-      return self.__enemy_sprites
-
-  def setEnvironment_sprites(self, value):
-      self.__environment_sprites = value
 
   def setBases(self, value):
       self.__bases = value
 
-  def setEnemy_sprites(self, value):
-      self.__enemy_sprites = value
-
-  def delEnvironment_sprites(self):
-      del self.__environment_sprites
-
   def delBases(self):
       del self.__bases
 
-  def delEnemy_sprites(self):
-      del self.__enemy_sprites
+  def getLevel_multiplier(self):
+      return self.__level_multiplier
 
-  def award_kill(self, value):
-    self.__funds += value
+  def setLevel_multiplier(self, value):
+      self.__level_multiplier = value
 
-  def notify_enemy_sprite_change(self):
-    if (len(self.__enemy_sprites.sprites()) == 0 and
-        self.enemy_lineup_complete):
-      print 'level %d complete' % self.__level
-      self.end_level()
-
-  def deduct_life(self):
-    self.__lives -= 1
-    if self.__lives <= 0:
-      self.__game_over = True
-
-  def get_next_enemy_type(self):
-    if self.level_enemy_lineup_index < len(self.level_enemy_lineup):
-      next_enemy = self.level_enemy_lineup[self.level_enemy_lineup_index]
-      self.level_enemy_lineup_index += 1
-      return next_enemy
-    self.enemy_lineup_complete = True
-    return None
-
-  def get_enemy_spawn_rate(self):
-    return 500
-
-  def spawn(self):
-    pos = self.__grid.grid_to_screen(self.__entry_grid_pos)
-    enemy_type = self.get_next_enemy_type()
-    if enemy_type is None:
-      return
-    pygame.time.set_timer(SPAWN_ENEMY, self.get_enemy_spawn_rate())
-    if enemy_type == Game.EASY:
-      attacker = EasyAttacker(pos, self)
-    elif enemy_type == Game.HARD:
-      attacker = HardAttacker(pos, self)
-    else:
-      print 'NO ENEMY SPAWNED!'
-    self.__enemy_sprites.add(attacker)
-
-  def add_turret(self, grid_position):
-    col, row = grid_position[0], grid_position[1]
-    if random.randint(0, 2) == 0:
-      turret = SmallTurret(self.__grid.grid_to_screen((col, row)), self)
-    else:
-      turret = BigTurret(self.__grid.grid_to_screen((col, row)), self)
-    if self.funds >= turret.COST:
-      self.funds -= turret.COST
-      self.__grid.set_cell(col, row, turret)
-      self.environment_sprites.add(turret)
-      self.regenerate_path()
-
-  def remove_turret(self, pos):
-    col, row = pos[0], pos[1]
-    contents = self.__grid.get_cell(col, row)
-    if isinstance(contents, Turret):
-      contents.parent_group.remove(contents)
-      self.__grid.set_cell(col, row, None)
-      self.regenerate_path()
-      self.funds += contents.value
-
-  def is_ok_to_place(self, pos):
-    col, row = self.__grid.screen_to_grid(pos)
-    contents = self.__grid.get_cell(col, row)
-    if contents:
-      return False
-    try:
-      self.__grid.set_cell(col, row, 0xdeadbeef)
-      if self.__grid.find_path(self.__entry_grid_pos,
-                               self.__exit_grid_pos) is not None:
-        return True
-      else:
-        return False
-    finally:
-      self.__grid.set_cell(col, row, None)
-
-  def handle_mouseup(self, pos):
-    col, row = self.__grid.screen_to_grid(pos)
-    contents = self.__grid.get_cell(col, row)
-    if not contents:
-      self.add_turret((col, row))
-      return
-    if isinstance(contents, Wall):
-      return
-    if isinstance(contents, Turret):
-      self.remove_turret((col, row))
-      return
-    print 'huh?'
-
-  def handle_mousemotion(self, pos):
-    self.__cursor_grid_pos = None
-    col, row = self.__grid.screen_to_grid(pos)
-    contents = self.__grid.get_cell(col, row)
-    if not contents:
-      self.__cursor_grid_pos = (col, row)
-      self.ok_to_place = self.is_ok_to_place(pos)
-
-  def handle_events(self):
-    for event in pygame.event.get():
-      if event.type == QUIT:
-        return True
-      elif event.type == KEYDOWN and event.key == K_ESCAPE:
-        return True
-      elif event.type == MOUSEBUTTONUP:
-        self.handle_mouseup(event.pos)
-      elif event.type == MOUSEMOTION:
-        self.handle_mousemotion(event.pos)
-      elif event.type == SPAWN_ENEMY:
-        pygame.time.set_timer(SPAWN_ENEMY, 0)
-        self.spawn()
-      elif event.type == BEGIN_LEVEL:
-        pygame.time.set_timer(BEGIN_LEVEL, 0)
-        self.begin_level()
-    return False
-
-  def kill_actor_sprite(self, sprite):
-    self.__enemy_sprites.remove(sprite)
-
-  def get_level_multiplier(self):
-    return 1.0
-
-  def draw_dashboard(self):
-    line_height = self.__small_font.get_height()
-    position = (5, SCREEN_SIZE_Y - 40)
-    cursor = position
-
-    fillrect = pygame.Rect(position, (80, line_height * 2))
-    self.__screen.fill(DASH_BACKGROUND_COLOR, fillrect)
-
-    str = '$%d, Lives %d' % (self.__funds, self.__lives)
-    text = self.__small_font.render(str, 1, DASH_COLOR)
-    textpos = text.get_rect()
-    textpos.topleft = cursor
-    text.set_alpha(128)
-    self.__screen.blit(text, textpos)
-    cursor = (cursor[0], cursor[1] + line_height)
-
-    str = 'Level %d' % (self.__level + 1)
-    text = self.__small_font.render(str, 1, DASH_COLOR)
-    textpos = text.get_rect()
-    textpos.topleft = cursor
-    text.set_alpha(128)
-    self.__screen.blit(text, textpos)
-    cursor = (cursor[0], cursor[1] + line_height)
-
-  def generate_game_over_image(self):
-    self.game_over_image = pygame.Surface((SCREEN_SIZE_X,
-                                           self.__big_font.get_height() + 16))
-    self.game_over_image.fill((0, 0, 192))
-    self.game_over_image.set_alpha(192)
-    text = self.__big_font.render('Game Over', 1, (192, 0, 0))
-    textpos = text.get_rect(centerx=self.game_over_image.get_width() / 2)
-    textpos.top = 8
-    self.game_over_image.blit(text, textpos)
-
-  def draw_game_over(self):
-    self.__screen.blit(self.game_over_image,
-                       (0, (SCREEN_SIZE_Y -
-                            self.game_over_image.get_height()) / 4))
-
-  def enqueue_banner_message(self, text):
-    self.__enqueued_banner_messages.append(text)
-
-  def tick_banner(self, msec_since_last):
-    if not self.__banner_image:
-      try:
-        message = self.__enqueued_banner_messages.pop(0)
-        if message:
-          self.generate_banner(message)
-          self.__banner_countdown = 4000
-      except IndexError:
-        pass
-      return
-    self.__banner_countdown -= msec_since_last
-    if self.__banner_countdown <= 0:
-      self.__banner_image = None
-    else:
-      self.__banner_alpha = float(BANNER_ALPHA)
-      if self.__banner_countdown > BANNER_FADE_IN_END:
-        self.__banner_alpha *= (float(BANNER_DURATION - self.__banner_countdown) /
-                                float(BANNER_DURATION - BANNER_FADE_IN_END))
-      elif self.__banner_countdown < BANNER_FADE_OUT_START:
-        self.__banner_alpha *= (float(self.__banner_countdown) /
-                                BANNER_FADE_OUT_START)
-      self.__banner_alpha = int(self.__banner_alpha)
-      self.__banner_image.set_alpha(self.__banner_alpha)
-
-  def generate_banner(self, message):
-    self.__banner_image = pygame.Surface((SCREEN_SIZE_X,
-                                          self.__big_font.get_height() + 16))
-    self.__banner_image.fill((0, 0, 192))
-    self.__banner_image.set_alpha(self.__banner_alpha)
-    text = self.__big_font.render(message, 1, (255, 255, 0))
-    textpos = text.get_rect(centerx=self.__banner_image.get_width() / 2)
-    textpos.top = 8
-    self.__banner_image.blit(text, textpos)
-
-  def draw_banner(self):
-    if self.__banner_image:
-      self.__screen.blit(self.__banner_image,
-                         (0, (SCREEN_SIZE_Y -
-                              self.__banner_image.get_height()) / 4))
-    
-  def run(self):
-    while True:
-      elapsed = self.__clock.tick(FPS)
-      self.tick_banner(elapsed)
-
-      if self.handle_events():
-        return
-
-      self.__screen.blit(self.__background, (0, 0))
-
-      if self.__cursor_grid_pos:
-        cursor_rect = pygame.Rect(0, 0, 16, 16)
-        cursor_rect.center = self.__grid.grid_to_screen(self.__cursor_grid_pos)
-        if self.ok_to_place:
-          self.__screen.fill((0, 255, 0), cursor_rect)
-        else:
-          self.__screen.fill((255, 0, 0), cursor_rect)
-      for group in self.__sprite_groups:
-        if not self.__game_over:
-          group.update(elapsed)
-        group.draw(self.__screen)
-        if hasattr(group, 'needs_draw_call'):
-          for sprite in group:
-            sprite.draw(self.__screen)
-      self.draw_dashboard()
-      if self.__game_over:
-        self.draw_game_over()
-      else:
-        self.draw_banner()
-      pygame.display.flip()
-
-  environment_sprites = property(getEnvironment_sprites,
-                                 setEnvironment_sprites,
-                                 delEnvironment_sprites,
-                                 "Environment_sprites's Docstring")
+  def delLevel_multiplier(self):
+      del self.__level_multiplier
 
   bases = property(getBases, setBases, delBases, "Bases's Docstring")
-
-  enemy_sprites = property(getEnemy_sprites,
-                           setEnemy_sprites,
-                           delEnemy_sprites,
-                           "Enemy_sprites's Docstring")
 
   path_map = property(getPath_map, setPath_map, delPath_map,
                       "Path_map's Docstring")
@@ -872,6 +944,19 @@ class Game(object):
   funds = property(getFunds, setFunds, delFunds, "Funds's Docstring")
 
   grid = property(getGrid, setGrid, delGrid, "Grid's Docstring")
+
+  enemy_sprites = property(getEnemy_sprites, setEnemy_sprites,
+                           delEnemy_sprites, "Enemy_sprites's Docstring")
+
+  funds = property(getFunds, setFunds, delFunds, "Funds's Docstring")
+
+  lives = property(getLives, setLives, delLives, "Lives's Docstring")
+
+  level = property(getLevel, setLevel, delLevel, "Level's Docstring")
+
+  level_multiplier = property(getLevel_multiplier, setLevel_multiplier,
+                              delLevel_multiplier,
+                              "Level_multiplier's Docstring")
 
 def main():
   game = Game()
