@@ -9,7 +9,7 @@
 # - balance the gameplay
 
 from pygame.locals import *
-from pymunk.vec2d import Vec2d
+from vec2d import Vec2d
 import math
 import os
 import pygame
@@ -348,7 +348,9 @@ class Cursor(pygame.sprite.Sprite):
       self.image.fill(new_color)
       self.current_color = new_color
 
-  is_valid_placement = property(getIs_valid_placement, setIs_valid_placement, delIs_valid_placement, "Is_valid_placement's Docstring")
+  is_valid_placement = property(getIs_valid_placement, setIs_valid_placement,
+                                delIs_valid_placement,
+                                "Is_valid_placement's Docstring")
 
   is_buy = property(getIs_buy, setIs_buy, delIs_buy, "Is_buy's Docstring")
 
@@ -584,7 +586,7 @@ class HardAttacker(Attacker):
   IMAGE_FILENAME = os.path.join(ASSET_DIR, 'attacker2.png')
   SPEED = 1.8
   HEALTH = 60.0
-  VALUE = 1.0
+  VALUE = 5.0
   
   image = None
   sound_explosion = None

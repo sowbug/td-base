@@ -77,7 +77,8 @@ extra_files = [
 
 setup(windows=[{'script': SCRIPT_MAIN,
 'other_resources': [(u'VERSIONTAG', 1, VERSIONSTRING)],
-'icon_resources': [(1, ICONFILE)]
+'icon_resources': [(1, ICONFILE)],
+'dest_base': PRODUCT_NAME,
 }],
 options={'py2exe': { 'optimize': 2,
                      'includes': INCLUDE_STUFF,
