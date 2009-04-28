@@ -3,9 +3,10 @@
 # TODO
 #
 # - carcasses
-# - drag new turrets from menu
-# - sell/upgrade menu
 # - accurate turret shots
+# - restart game when over
+# - add more enemies and turrets
+# - balance the gameplay
 
 from pygame.locals import *
 from pymunk.vec2d import Vec2d
@@ -45,8 +46,7 @@ class Base(pygame.sprite.Sprite):
     pygame.sprite.Sprite.__init__(self, self.containers)
     self.game = game
     self.is_exit = is_exit
-    self.image = pygame.image.load(os.path.join(ASSET_DIR,
-                                                'base.png'))
+    self.image = pygame.image.load(os.path.join(ASSET_DIR, 'base.png'))
     self.position = position
     self.rect = self.image.get_rect(center=position)
 
@@ -57,8 +57,7 @@ class Wall(pygame.sprite.Sprite):
   def __init__(self, position):
     self._layer = 2
     pygame.sprite.Sprite.__init__(self, self.containers)
-    self.image = pygame.image.load(os.path.join(ASSET_DIR,
-                                                'wall.png'))
+    self.image = pygame.image.load(os.path.join(ASSET_DIR, 'wall.png'))
     self.position = position
     self.rect = self.image.get_rect(center=position)
 
@@ -66,8 +65,8 @@ class Wall(pygame.sprite.Sprite):
     pass
 
 class Dashboard(pygame.sprite.Sprite):
-  BACKGROUND_COLOR = (128, 128, 128)
-  COLOR = (192, 192, 0)
+  BACKGROUND_COLOR = (64, 64, 64)
+  COLOR = (255, 255, 0)
   
   def __init__(self, position, game, font, line_count):
     self._layer = 10
@@ -76,11 +75,14 @@ class Dashboard(pygame.sprite.Sprite):
     self.font = font
     self.line_count = line_count
     self.line_height = self.font.get_height()
-    self.image = pygame.Surface((80, self.line_height * self.line_count)).convert()
-    self.rect = self.image.get_rect(topleft=position)
+    self.image = pygame.Surface((80, self.line_height * 
+                                 self.line_count)).convert()
+    self.rect = self.image.get_rect()
+    self.rect.left = position[0]
+    self.rect.bottom = position[1]
 
   def update(self, dt):
-    cursor = (0, 0)
+    cursor = (4, 0)
 
     self.image.fill(Dashboard.BACKGROUND_COLOR)
 
@@ -100,29 +102,260 @@ class Dashboard(pygame.sprite.Sprite):
     self.image.blit(text, textpos)
     cursor = (cursor[0], cursor[1] + self.line_height)
 
+class TurretMenu(pygame.sprite.Sprite):
+  FONT_COLOR = (255, 255, 0)
+  WIDTH = 4 * 16 + (4 - 1) * 2 + 8
+  
+  game = None 
+
+  def __init__(self, position, font):
+    self.__selected_turret = None
+    self._layer = 10
+    pygame.sprite.Sprite.__init__(self, self.containers)
+    self.font = font
+    self.line_height = self.font.get_height()
+    self.image = pygame.Surface((TurretMenu.WIDTH,
+                                 16 + self.line_height)).convert()
+    self.rect = self.image.get_rect()
+    self.rect.right = position[0]
+    self.rect.bottom = position[1]
+
+    self.image.fill((64, 64, 64), self.image.get_rect())
+    x_cursor = 4
+
+    turret_image = SmallTurret.get_image()
+    turret_rect = turret_image.get_rect(left=x_cursor)
+    self.image.blit(turret_image, turret_rect)
+    x_cursor += 16 + 2
+
+    turret_image = BigTurret.get_image()
+    turret_rect = turret_image.get_rect(left=x_cursor)
+    self.image.blit(turret_image, turret_rect)
+    x_cursor += 16 + 2
+
+    x_cursor = 4 + 8
+
+    str = '%d' % (SmallTurret.COST)
+    text = self.font.render(str, 1, TurretMenu.FONT_COLOR)
+    textpos = text.get_rect()
+    textpos.centerx = x_cursor
+    textpos.top = 16
+    self.image.blit(text, textpos)
+    x_cursor += 16 + 2
+
+    str = '%d' % (BigTurret.COST)
+    text = self.font.render(str, 1, TurretMenu.FONT_COLOR)
+    textpos = text.get_rect()
+    textpos.centerx = x_cursor
+    textpos.top = 16
+    self.image.blit(text, textpos)
+    x_cursor += 16 + 2
+
+    self.image_no_selection = self.image
+    self.image_selections = []
+    for i in range(0, 4):
+      image_rect = self.image_no_selection.get_rect()
+      image = pygame.Surface(image_rect.size).convert()
+      image.blit(self.image_no_selection, image_rect)
+      rect = pygame.Rect((4 + i * 16, 0), (16, 16))
+      pygame.draw.rect(image, (255, 255, 0), rect, 2)
+      self.image_selections.append(image)
+
+  def getSelected_turret(self):
+    return self.__selected_turret
+
+  def setSelected_turret(self, value):
+    if value is not None and self.__selected_turret == value:
+      self.__selected_turret = None
+    else:
+      self.__selected_turret = value
+    self.check_sufficient_funds()
+
+  def delSelected_turret(self):
+    del self.__selected_turret
+
+  def check_sufficient_funds(self):
+    if self.__selected_turret is not None:
+      funds = self.game.funds
+      if funds < self.__selected_turret.COST:
+        self.__selected_turret = None
+
+  def update(self, dt):
+    self.check_sufficient_funds()
+    self.image = self.image_no_selection
+    if self.__selected_turret is not None:
+      if self.__selected_turret == SmallTurret:
+        self.image = self.image_selections[0]
+      elif self.__selected_turret == BigTurret:
+        self.image = self.image_selections[1]
+
+  selected_turret = property(getSelected_turret, setSelected_turret,
+                             delSelected_turret, "Selected_turret's Docstring")
+
+class Button(pygame.sprite.Sprite):
+  def __init__(self, position, font, label, action):
+    self._layer = 9
+    pygame.sprite.Sprite.__init__(self, self.containers)
+    self.font = font
+    self.action = action
+    self.line_height = self.font.get_height()
+    text = self.font.render(label, 1, (255, 255, 0))
+    textpos = text.get_rect()
+    self.image = pygame.Surface(textpos.size).convert()
+    self.image.fill((0, 0, 255))
+    self.image.blit(text, textpos)
+    self.image.set_alpha(192)
+    self.rect = self.image.get_rect(center=position)
+
+  def update(self, dt):
+    pass
+  
+  def clicked(self):
+    self.action()
+    self.kill()
+
+class TurretSellMenu(pygame.sprite.Sprite):
+  FONT_COLOR = (255, 255, 0)
+  WIDTH = 4 * 16 + (4 - 1) * 2 + 8
+  
+  game = None 
+
+  def __init__(self, position, font):
+    self.__selected_turret = None
+    self._layer = 10
+    pygame.sprite.Sprite.__init__(self, self.containers)
+    self.font = font
+    self.line_height = self.font.get_height()
+    self.image = pygame.Surface((TurretMenu.WIDTH,
+                                 16 + self.line_height)).convert()
+    self.rect = self.image.get_rect()
+    self.rect.right = position[0]
+    self.rect.bottom = position[1]
+
+    self.image.fill((64, 64, 64), self.image.get_rect())
+    x_cursor = 4
+
+    turret_image = SmallTurret.get_image()
+    turret_rect = turret_image.get_rect(left=x_cursor)
+    self.image.blit(turret_image, turret_rect)
+    x_cursor += 16 + 2
+
+    turret_image = BigTurret.get_image()
+    turret_rect = turret_image.get_rect(left=x_cursor)
+    self.image.blit(turret_image, turret_rect)
+    x_cursor += 16 + 2
+
+    x_cursor = 4 + 8
+
+    str = '%d' % (SmallTurret.COST)
+    text = self.font.render(str, 1, TurretMenu.FONT_COLOR)
+    textpos = text.get_rect()
+    textpos.centerx = x_cursor
+    textpos.top = 16
+    self.image.blit(text, textpos)
+    x_cursor += 16 + 2
+
+    str = '%d' % (BigTurret.COST)
+    text = self.font.render(str, 1, TurretMenu.FONT_COLOR)
+    textpos = text.get_rect()
+    textpos.centerx = x_cursor
+    textpos.top = 16
+    self.image.blit(text, textpos)
+    x_cursor += 16 + 2
+
+    self.image_no_selection = self.image
+    self.image_selections = []
+    for i in range(0, 4):
+      image_rect = self.image_no_selection.get_rect()
+      image = pygame.Surface(image_rect.size).convert()
+      image.blit(self.image_no_selection, image_rect)
+      rect = pygame.Rect((4 + i * 16, 0), (16, 16))
+      pygame.draw.rect(image, (255, 255, 0), rect, 2)
+      self.image_selections.append(image)
+
+  def getSelected_turret(self):
+    return self.__selected_turret
+
+  def setSelected_turret(self, value):
+    if value is not None and self.__selected_turret == value:
+      self.__selected_turret = None
+    else:
+      self.__selected_turret = value
+    self.check_sufficient_funds()
+
+  def delSelected_turret(self):
+    del self.__selected_turret
+
+  def check_sufficient_funds(self):
+    if self.__selected_turret is not None:
+      funds = self.game.funds
+      if funds < self.__selected_turret.COST:
+        self.__selected_turret = None
+
+  def update(self, dt):
+    self.check_sufficient_funds()
+    self.image = self.image_no_selection
+    if self.__selected_turret is not None:
+      if self.__selected_turret == SmallTurret:
+        self.image = self.image_selections[0]
+      elif self.__selected_turret == BigTurret:
+        self.image = self.image_selections[1]
+
+  selected_turret = property(getSelected_turret, setSelected_turret,
+                             delSelected_turret, "Selected_turret's Docstring")
+
 class Cursor(pygame.sprite.Sprite):
   def __init__(self):
     self._layer = 4
     pygame.sprite.Sprite.__init__(self, self.containers)
     self.image = pygame.Surface((16, 16)).convert()
     self.rect = self.image.get_rect()
+    self.__is_valid_placement = False
+    self.__is_buy = False
+    self.current_color = None
 
-  def set_valid_placement(self, is_valid):
-    if is_valid:
-      self.image.fill((0, 255, 0))
-    else:
-      self.image.fill((255, 0, 0))
+  def getIs_valid_placement(self):
+      return self.__is_valid_placement
+
+  def getIs_buy(self):
+      return self.__is_buy
+
+  def setIs_valid_placement(self, value):
+      self.__is_valid_placement = value
+
+  def setIs_buy(self, value):
+      self.__is_buy = value
+
+  def delIs_valid_placement(self):
+      del self.__is_valid_placement
+
+  def delIs_buy(self):
+      del self.__is_buy
 
   def set_position(self, position):
     self.rect.center = position
 
   def update(self, dt):
-    pass
+    new_color = None
+    if self.__is_buy:
+      if self.__is_valid_placement:
+        new_color = (0, 255, 0)
+      else:
+        new_color = (255, 0, 0)
+    else:
+      new_color = (255, 255, 0)
+    if new_color != self.current_color:
+      self.image.fill(new_color)
+      self.current_color = new_color
+
+  is_valid_placement = property(getIs_valid_placement, setIs_valid_placement, delIs_valid_placement, "Is_valid_placement's Docstring")
+
+  is_buy = property(getIs_buy, setIs_buy, delIs_buy, "Is_buy's Docstring")
 
 class GameOver(pygame.sprite.Sprite):
   BACKGROUND_COLOR = (128, 128, 128)
   COLOR = (192, 192, 0)
-  
+
   def __init__(self, font):
     self._layer = 10
     pygame.sprite.Sprite.__init__(self, self.containers)
@@ -239,8 +472,9 @@ class Explosion(pygame.sprite.Sprite):
       self.kill()
     else:
       if self.lifetime < self.lifetime_fade_start:
-        self.image = Explosion.frames[int(Explosion.IMAGE_FRAMES *
-                                          float(self.lifetime) / self.lifetime_fade_start)]
+        self.image = Explosion.frames[int(Explosion.IMAGE_FRAMES * 
+                                          float(self.lifetime) / 
+                                          self.lifetime_fade_start)]
 
 class Attacker(pygame.sprite.Sprite):
   def __init__(self, position, game, image, sound_explosion,
@@ -329,21 +563,25 @@ class EasyAttacker(Attacker):
   
   image = None
   sound_explosion = None
-  
-  def __init__(self, position, game):
+
+  def get_image():
     if EasyAttacker.image is None:
       EasyAttacker.image = pygame.image.load(EasyAttacker.IMAGE_FILENAME)
+    return EasyAttacker.image
+  get_image = staticmethod(get_image)
+  
+  def __init__(self, position, game):
     if EasyAttacker.sound_explosion is None:
       EasyAttacker.sound_explosion = load_sound('explosion.wav')
     Attacker.__init__(self, position, game,
-                      EasyAttacker.image,
+                      EasyAttacker.get_image(),
                       EasyAttacker.sound_explosion,
                       EasyAttacker.HEALTH,
                       EasyAttacker.SPEED,
                       EasyAttacker.VALUE)
 
 class HardAttacker(Attacker):
-  IMAGE_FILENAME = os.path.join(ASSET_DIR, 'attacker.png')
+  IMAGE_FILENAME = os.path.join(ASSET_DIR, 'attacker2.png')
   SPEED = 1.8
   HEALTH = 60.0
   VALUE = 1.0
@@ -351,13 +589,17 @@ class HardAttacker(Attacker):
   image = None
   sound_explosion = None
   
-  def __init__(self, position, game):
+  def get_image():
     if HardAttacker.image is None:
       HardAttacker.image = pygame.image.load(HardAttacker.IMAGE_FILENAME)
+    return HardAttacker.image
+  get_image = staticmethod(get_image)
+  
+  def __init__(self, position, game):
     if HardAttacker.sound_explosion is None:
       HardAttacker.sound_explosion = load_sound('explosion.wav')
     Attacker.__init__(self, position, game,
-                      HardAttacker.image,
+                      HardAttacker.get_image(),
                       HardAttacker.sound_explosion,
                       HardAttacker.HEALTH,
                       HardAttacker.SPEED,
@@ -476,12 +718,16 @@ class SmallTurret(Turret):
   image = None
   sound_shot = None
   
-  def __init__(self, position, game):
+  def get_image():
     if SmallTurret.image is None:
       SmallTurret.image = pygame.image.load(SmallTurret.IMAGE_FILENAME)
+    return SmallTurret.image
+  get_image = staticmethod(get_image)
+  
+  def __init__(self, position, game):
     if SmallTurret.sound_shot is None:
       SmallTurret.sound_shot = load_sound('shot.wav')
-    Turret.__init__(self, position, game, SmallTurret.image,
+    Turret.__init__(self, position, game, SmallTurret.get_image(),
                     SmallTurret.sound_shot,
                     fire_rate=SmallTurret.FIRE_RATE,
                     fire_ratio=SmallTurret.FIRE_RATIO,
@@ -499,13 +745,18 @@ class BigTurret(Turret):
   
   image = None
   sound_shot = None
-  
-  def __init__(self, position, game):
+
+  def get_image():
     if BigTurret.image is None:
       BigTurret.image = pygame.image.load(BigTurret.IMAGE_FILENAME)
+    return BigTurret.image
+  get_image = staticmethod(get_image)
+  
+  
+  def __init__(self, position, game):
     if BigTurret.sound_shot is None:
       BigTurret.sound_shot = load_sound('shot.wav')
-    Turret.__init__(self, position, game, BigTurret.image,
+    Turret.__init__(self, position, game, BigTurret.get_image(),
                     BigTurret.sound_shot,
                     fire_rate=BigTurret.FIRE_RATE,
                     fire_ratio=BigTurret.FIRE_RATIO,
@@ -704,11 +955,14 @@ class Game(object):
     Banner.font = self.__big_font
 
     self.__background_sprites = pygame.sprite.RenderUpdates()
+    self.__widget_sprites = pygame.sprite.RenderUpdates()
     self.__enemy_sprites = pygame.sprite.RenderUpdates()
     self.__foreground_sprites = pygame.sprite.RenderUpdates()
     self.__all_sprites = pygame.sprite.LayeredUpdates()
 
     Dashboard.containers = self.__foreground_sprites, self.__all_sprites
+    Button.containers = self.__widget_sprites, self.__all_sprites
+    TurretMenu.containers = self.__foreground_sprites, self.__all_sprites
     Cursor.containers = self.__background_sprites, self.__all_sprites
     Banner.containers = self.__foreground_sprites, self.__all_sprites
     GameOver.containers = self.__foreground_sprites, self.__all_sprites
@@ -718,6 +972,8 @@ class Game(object):
     Base.containers = self.__background_sprites, self.__all_sprites
     Turret.containers = self.__background_sprites, self.__all_sprites
     Attacker.containers = self.__enemy_sprites, self.__all_sprites
+    
+    TurretMenu.game = self
 
     self.create_environment()
 
@@ -732,6 +988,9 @@ class Game(object):
 
     self.__cursor = None
 
+    self.__sell_button = None
+    self.__upgrade_button = None
+
     self.start_game()
 
   def start_game(self):
@@ -745,7 +1004,7 @@ class Game(object):
   def create_environment(self):
     TILE_SIZE = 16
     GRAPH_COL = SCREEN_SIZE_X / TILE_SIZE
-    GRAPH_ROW = SCREEN_SIZE_Y / TILE_SIZE
+    GRAPH_ROW = SCREEN_SIZE_Y / TILE_SIZE - 1
     self.__grid = Grid(GRAPH_COL, GRAPH_ROW, TILE_SIZE)
     self.__entry_grid_pos = (1, GRAPH_ROW / 2)
     self.__exit_grid_pos = (GRAPH_COL - 2, GRAPH_ROW / 2)
@@ -824,9 +1083,11 @@ class Game(object):
       print 'NO ENEMY SPAWNED!'
 
   def add_turret(self, grid_position):
+    if not self.__turret_menu.selected_turret:
+      return
     col, row = grid_position[0], grid_position[1]
     turret = None
-    if random.randint(0, 2) == 0:
+    if self.__turret_menu.selected_turret == SmallTurret:
       if self.funds >= SmallTurret.COST:
         turret = SmallTurret(self.__grid.grid_to_screen((col, row)), self)
     else:
@@ -846,35 +1107,104 @@ class Game(object):
       self.regenerate_path()
       self.funds += contents.value
 
-  def handle_mouseup(self, pos):
-    col, row = self.__grid.screen_to_grid(pos)
+  def upgrade_turret(self, pos):
+    col, row = pos[0], pos[1]
     contents = self.__grid.get_cell(col, row)
-    if not contents:
-      self.add_turret((col, row))
-      return
-    if isinstance(contents, Wall):
-      return
     if isinstance(contents, Turret):
-      self.remove_turret((col, row))
-      return
-    print 'huh?'
+      print 'upgrade!'
+
+  def reset_turret_buttons(self):
+    if self.__sell_button:
+      self.__sell_button.kill()
+      self.__sell_button = None
+    if self.__upgrade_button:
+      self.__upgrade_button.kill()
+      self.__upgrade_button = None
+      
+  def generate_turret_buttons(self, turret):
+    self.reset_turret_buttons()    
+    col, row = self.__grid.screen_to_grid(turret.position)
+    center_position = self.__grid.grid_to_screen((col, row))
+    left_of_center = (center_position[0] - 20, center_position[1] - 8)
+    self.__sell_button = Button(left_of_center, self.__small_font, "Sell",
+                                lambda: self.remove_turret((col, row)))
+    right_of_center = (center_position[0] + 30, center_position[1] - 8)
+    self.__upgrade_button = Button(right_of_center, self.__small_font, "Upgrade",
+                                   lambda: self.upgrade_turret((col, row)))
+
+  def handle_turret_button_clicks(self, pos):
+    if self.__sell_button and self.__sell_button.rect.collidepoint(pos):
+      self.__sell_button.clicked()
+      return True
+    elif self.__upgrade_button and self.__upgrade_button.rect.collidepoint(pos):
+      self.__upgrade_button.clicked()
+      return True
+    return False
+
+  def handle_mouseup(self, pos):
+    generated_turret_buttons = False
+    try:
+      if self.handle_turret_button_clicks(pos):
+        return
+      if self.__turret_menu.rect.collidepoint(pos):
+        local_pos = (pos[0] - self.__turret_menu.rect.left,
+                     pos[1] - self.__turret_menu.rect.top)
+        if local_pos[1] >= 16:
+          self.__turret_menu.selected_turret = None
+          return
+        horizontal = (local_pos[0] - 4) / 16
+        if horizontal <= 0:
+          self.__turret_menu.selected_turret = SmallTurret
+        elif horizontal == 1:
+          self.__turret_menu.selected_turret = BigTurret
+        else:
+          self.__turret_menu.selected_turret = None
+        return
+      else:
+        col, row = self.__grid.screen_to_grid(pos)
+        contents = self.__grid.get_cell(col, row)
+        if not contents:
+          if not self.__turret_menu.selected_turret:
+            return
+          self.add_turret((col, row))
+          return
+        if isinstance(contents, Wall):
+          return
+        if isinstance(contents, Turret):
+          generated_turret_buttons = True
+          self.generate_turret_buttons(contents)
+          return
+        print 'huh?'
+    finally:
+      if not generated_turret_buttons:
+        self.reset_turret_buttons()
 
   def handle_mousemotion(self, pos):
     col, row = self.__grid.screen_to_grid(pos)
     contents = self.__grid.get_cell(col, row)
-    if not contents:
-      if not self.__cursor:
-        cursor = Cursor()
-        self.__cursor = cursor
-      self.__cursor.set_position(self.__grid.grid_to_screen((col, row)))
-      is_valid = self.__grid.is_ok_to_place(self.__entry_grid_pos,
-                                            self.__exit_grid_pos,
-                                            pos)
-      self.__cursor.set_valid_placement(is_valid)
+    if contents:
+      if isinstance(contents, Turret):
+        if not self.__cursor:
+          cursor = Cursor()
+          self.__cursor = cursor
+        self.__cursor.set_position(self.__grid.grid_to_screen((col, row)))
+        self.__cursor.is_buy = False
+        return
     else:
-      if self.__cursor:
-        self.__cursor.kill()
-        self.__cursor = None
+      if self.__turret_menu.selected_turret is not None:
+        if not self.__cursor:
+          cursor = Cursor()
+          self.__cursor = cursor
+        self.__cursor.set_position(self.__grid.grid_to_screen((col, row)))
+        self.__cursor.is_valid_placement = \
+        self.__grid.is_ok_to_place(self.__entry_grid_pos,
+                                   self.__exit_grid_pos,
+                                   pos)
+        self.__cursor.is_buy = True
+        return
+    if self.__cursor:
+      self.__cursor.kill()
+      self.__cursor = None
 
   def handle_events(self):
     for event in pygame.event.get():
@@ -900,7 +1230,9 @@ class Game(object):
     screen.blit(background, background.get_rect())
     pygame.display.update()
 
-    dashboard = Dashboard((5, SCREEN_SIZE_Y - 40), self, self.__small_font, 2)
+    dashboard = Dashboard((5, SCREEN_SIZE_Y), self, self.__small_font, 2)
+    self.__turret_menu = TurretMenu((SCREEN_SIZE_X - 5,
+                                     SCREEN_SIZE_Y), self.__small_font)
     game_over = None
 
     while True:
