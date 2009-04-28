@@ -20,10 +20,6 @@ SCREEN_SIZE_X = 480
 SCREEN_SIZE_Y = 320
 FPS = 60
 ASSET_DIR = 'assets'
-TRANSPARENCY_KEY_COLOR = (255, 0, 255)
-
-FIELD_BACKGROUND_COLOR = (0, 192, 0)
-
 SPAWN_ENEMY = pygame.USEREVENT
 BEGIN_LEVEL = pygame.USEREVENT + 1
 
@@ -381,7 +377,7 @@ class Shot(pygame.sprite.Sprite):
     self.damage_ability = damage_ability
 
     self.image = pygame.Surface((2, 2)).convert()
-    self.image.fill((255, 255, 0))
+    self.image.fill((96, 96, 0))
     self.rect = self.image.get_rect(center=self.position)
 
     self.vector = (Vec2d(self.end_position) - Vec2d(self.position)).normalized()
@@ -678,7 +674,6 @@ class Grid(object):
       self.set_cell(col, row, None)
 
 class Game(object):
-
   EASY, HARD = (0, 1) 
   LEVELS = [
             (1.0, [ EASY, EASY, EASY ]),
@@ -901,8 +896,7 @@ class Game(object):
 
   def run(self):
     screen = pygame.display.set_mode((SCREEN_SIZE_X, SCREEN_SIZE_Y))
-    background = pygame.Surface(screen.get_size()).convert()
-    background.fill(FIELD_BACKGROUND_COLOR)
+    background = pygame.image.load(os.path.join(ASSET_DIR, 'background.png'))
     screen.blit(background, background.get_rect())
     pygame.display.update()
 
