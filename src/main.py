@@ -2,9 +2,10 @@
 
 # TODO
 #
-# - explosions and carcasses
+# - carcasses
 # - drag new turrets from menu
 # - sell/upgrade menu
+# - accurate turret shots
 
 from pygame.locals import *
 from pymunk.vec2d import Vec2d
@@ -48,7 +49,8 @@ class Base(pygame.sprite.Sprite):
     pygame.sprite.Sprite.__init__(self, self.containers)
     self.game = game
     self.is_exit = is_exit
-    self.image = pygame.image.load(os.path.join(ASSET_DIR, 'base.png'))
+    self.image = pygame.image.load(os.path.join(ASSET_DIR,
+                                                'base.png'))
     self.position = position
     self.rect = self.image.get_rect(center=position)
 
@@ -59,7 +61,8 @@ class Wall(pygame.sprite.Sprite):
   def __init__(self, position):
     self._layer = 2
     pygame.sprite.Sprite.__init__(self, self.containers)
-    self.image = pygame.image.load(os.path.join(ASSET_DIR, 'wall.png'))
+    self.image = pygame.image.load(os.path.join(ASSET_DIR,
+                                                'wall.png'))
     self.position = position
     self.rect = self.image.get_rect(center=position)
 
@@ -205,6 +208,44 @@ class Banner(pygame.sprite.Sprite):
       Banner.current_banner = None
   reset = staticmethod(reset)
 
+class Explosion(pygame.sprite.Sprite):
+  IMAGE_FILENAME = os.path.join(ASSET_DIR, 'explosion_1.png')
+  
+  IMAGE_FRAMES = 10
+  image = None
+  frames = []
+
+  def __init__(self, position):
+    self._layer = 2
+    pygame.sprite.Sprite.__init__(self, self.containers)
+    if Explosion.image is None:
+      Explosion.image = pygame.image.load(Explosion.IMAGE_FILENAME)
+      colorkey = Explosion.image.get_at((0, 0))
+      # Unfortunate SDL limitation that it can't handle surface-wide and per-
+      # pixel alpha at the same time. So we fake it.
+      for i in range(0, Explosion.IMAGE_FRAMES):
+        image = pygame.Surface(Explosion.image.get_rect().size)
+        image.set_colorkey(colorkey, RLEACCEL)
+        image.set_alpha(255.0 * float(i) / float(Explosion.IMAGE_FRAMES))
+        image.blit(Explosion.image, Explosion.image.get_rect())
+        Explosion.frames.append(image)
+    self.image = pygame.image.load(os.path.join(ASSET_DIR,
+                                                'explosion_1.png'))
+    self.position = position
+    self.rect = self.image.get_rect(center=position)
+    self.lifetime_max = 2000
+    self.lifetime_fade_start = 1000.0
+    self.lifetime = self.lifetime_max
+
+  def update(self, dt):
+    self.lifetime -= dt
+    if self.lifetime <= 0:
+      self.kill()
+    else:
+      if self.lifetime < self.lifetime_fade_start:
+        self.image = Explosion.frames[int(Explosion.IMAGE_FRAMES *
+                                          float(self.lifetime) / self.lifetime_fade_start)]
+
 class Attacker(pygame.sprite.Sprite):
   def __init__(self, position, game, image, sound_explosion,
                health, speed, value):
@@ -244,6 +285,7 @@ class Attacker(pygame.sprite.Sprite):
     self.health -= points
     if self.health <= 0:
       self.sound_explosion.play()
+      Explosion(self.position)
       self.game.award_kill(self.value)
       self.die()
 
@@ -429,7 +471,7 @@ class Turret(pygame.sprite.Sprite):
 
 class SmallTurret(Turret):
   IMAGE_FILENAME = os.path.join(ASSET_DIR, 'turret.png')
-  FIRE_RATE = 1000.0
+  FIRE_RATE = 250.0
   FIRE_RATIO = 2.0
   DAMAGE_ABILITY = 5.0
   COST = 3.0
@@ -676,6 +718,7 @@ class Game(object):
     Banner.containers = self.__foreground_sprites, self.__all_sprites
     GameOver.containers = self.__foreground_sprites, self.__all_sprites
     Wall.containers = self.__background_sprites, self.__all_sprites
+    Explosion.containers = self.__background_sprites, self.__all_sprites
     Shot.containers = self.__background_sprites, self.__all_sprites
     Base.containers = self.__background_sprites, self.__all_sprites
     Turret.containers = self.__background_sprites, self.__all_sprites
