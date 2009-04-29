@@ -1,0 +1,9 @@
+Tower Defense
+Copyright (c) 2009 Mike Tsao <mike.tsao@gmail.com>
+
+- accurate turret shots
+- add more enemies and turrets
+- balance the gameplay
+- carcasses
+- replace sound/art with other stuff (current sources are Quake2 and some
+  stuff that "I found on the web.")

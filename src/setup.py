@@ -1,7 +1,23 @@
-# Thanks to
-#http://www.moviepartners.com/blog/2009/03/20/making-py2exe-play-nice-with-pygame/
+# Tower Defense py2exe setup program
+# Copyright (c) 2009 Mike Tsao <mike.tsao@gmail.com>
 
-# py2exe setup program
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+# Thanks to
+# http://www.moviepartners.com/blog/2009/03/20/making-py2exe-play-nice-with-pygame/
+
 from distutils.core import setup
 import py2exe, pygame
 import sys
@@ -66,7 +82,7 @@ REMOVE_BUILD_ON_EXIT = True
 if os.path.exists(DIST_DIR): shutil.rmtree(DIST_DIR)
  
 extra_files = [
-('', ['README.txt', 'LICENSE.txt', ]),
+('', ['README.txt', 'LICENSE.txt', 'TODO.txt' ]),
 ('assets', glob.glob(os.path.join('assets', '*.png'))),
 ('assets', glob.glob(os.path.join('assets', '*.wav'))),
 ('assets', glob.glob(os.path.join('assets', '*.ico'))),

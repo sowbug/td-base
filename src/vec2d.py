@@ -1,3 +1,7 @@
+# This was taken from pymunk. It's separated from that project to avoid
+# the shared-library dependency hassles that come with the full pymunk/chipmunk
+# installation.
+
 __version__ = "$Id: vec2d.py 149 2008-10-25 16:36:37Z vb@viblo.se $"
 __docformat__ = "reStructuredText"
 

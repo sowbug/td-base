@@ -1,11 +1,19 @@
-# Copyright (c) 2009 Mike Tsao
+# Tower Defense
+# Copyright (c) 2009 Mike Tsao <mike.tsao@gmail.com>
 
-# TODO
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
 #
-# - accurate turret shots
-# - add more enemies and turrets
-# - balance the gameplay
-# - carcasses
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 from pygame.locals import *
 from vec2d import Vec2d
@@ -45,7 +53,11 @@ class Base(pygame.sprite.Sprite):
     pygame.sprite.Sprite.__init__(self, self.containers)
     self.game = game
     self.is_exit = is_exit
-    self.image = pygame.image.load(os.path.join(ASSET_DIR, 'base.png'))
+    if is_exit:
+      filename = 'base_end.png'
+    else:
+      filename = 'base_start.png'
+    self.image = pygame.image.load(os.path.join(ASSET_DIR, filename))
     self.position = position
     self.rect = self.image.get_rect(center=position)
 
@@ -552,7 +564,8 @@ class Attacker(pygame.sprite.Sprite):
     self.rect.center = self.position
     rotate = pygame.transform.rotate
     self.image = rotate(self.original_image, self.angle_degrees)
-
+    self.rect = self.image.get_rect(center=self.rect.center)
+    
   def draw(self, surface):
     if self.health < self.starting_health:
       full_rect = pygame.Rect((self.rect.topleft), (self.rect.width, 2))
@@ -683,7 +696,7 @@ class Turret(pygame.sprite.Sprite):
 
   def lock_target(self, enemy):
     self.__locked_enemy = enemy
-    vector = (Vec2d(self.position) - Vec2d(enemy.position)).normalized()
+    vector = (Vec2d(enemy.position) - Vec2d(self.position)).normalized()
     self.target_angle_degrees = - vector.get_angle()
     
   def check_enemy_collisions(self, dt):
@@ -714,6 +727,7 @@ class Turret(pygame.sprite.Sprite):
     self.check_enemy_collisions(dt)
     rotate = pygame.transform.rotate
     self.image = rotate(self.original_image, self.angle_degrees)
+    self.rect = self.image.get_rect(center=self.rect.center)
 
 class SmallTurret(Turret):
   IMAGE_FILENAME = os.path.join(ASSET_DIR, 'turret.png')
