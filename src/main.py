@@ -2,11 +2,10 @@
 
 # TODO
 #
-# - carcasses
 # - accurate turret shots
-# - restart game when over
 # - add more enemies and turrets
 # - balance the gameplay
+# - carcasses
 
 from pygame.locals import *
 from vec2d import Vec2d
@@ -636,16 +635,17 @@ class Shot(pygame.sprite.Sprite):
 
   def update(self, dt):
     self.lifetime -= dt
-    self.position += self.vector * (4.0 * float(dt) / float(FPS))
+    self.position += self.vector * (6.0 * float(dt) / float(FPS))
     self.rect.center = self.position
     if self.rect.colliderect(self.target.rect):
       if self.target.alive():
         self.sound_hit.play()
         self.target.inflict_damage(self.damage_ability)
       self.kill()
-    else:
-      if self.lifetime <= 0:
-        self.kill()
+    elif self.rect.collidepoint(self.end_position):
+      self.kill()
+    elif self.lifetime <= 0:
+      self.kill()
 
 class Turret(pygame.sprite.Sprite):
   def __init__(self, position, game, image, sound_shot,
@@ -1150,7 +1150,8 @@ class Game(object):
     if self.__sell_button and self.__sell_button.rect.collidepoint(pos):
       self.__sell_button.clicked()
       return True
-    elif self.__upgrade_button and self.__upgrade_button.rect.collidepoint(pos):
+    elif (self.__upgrade_button and
+          self.__upgrade_button.rect.collidepoint(pos)):
       self.__upgrade_button.clicked()
       return True
     return False
@@ -1161,7 +1162,8 @@ class Game(object):
       self.__game_over_button = None
       
   def handle_game_over_button_click(self, pos):
-    if self.__game_over_button and self.__game_over_button.rect.collidepoint(pos):
+    if (self.__game_over_button and
+        self.__game_over_button.rect.collidepoint(pos)):
       self.reset_game_over_button()
       self.start_game()
       return True
