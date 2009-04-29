@@ -193,7 +193,7 @@ class TurretMenu(pygame.sprite.Sprite):
                              delSelected_turret, "Selected_turret's Docstring")
 
 class Button(pygame.sprite.Sprite):
-  def __init__(self, position, font, label, action):
+  def __init__(self, font, label, action, **kwargs):
     self._layer = 9
     pygame.sprite.Sprite.__init__(self, self.containers)
     self.font = font
@@ -205,7 +205,13 @@ class Button(pygame.sprite.Sprite):
     self.image.fill((0, 0, 255))
     self.image.blit(text, textpos)
     self.image.set_alpha(192)
-    self.rect = self.image.get_rect(center=position)
+
+    if kwargs.has_key('center'):
+      self.rect = self.image.get_rect(center=kwargs['center'])
+    if kwargs.has_key('topleft'):
+      self.rect = self.image.get_rect(center=kwargs['topleft'])
+    if kwargs.has_key('bottomright'):
+      self.rect = self.image.get_rect(center=kwargs['bottomright'])
 
   def update(self, dt):
     pass
@@ -977,25 +983,25 @@ class Game(object):
     
     TurretMenu.game = self
 
-    self.create_environment()
-
-    self.__bases = [Base(self.__grid.grid_to_screen(self.__entry_grid_pos),
-                         self),
-                    Base(self.__grid.grid_to_screen(self.__exit_grid_pos),
-                         self, is_exit=True)]
-    for base in self.__bases:
-      self.__grid.set_cell(base.position[0], base.position[1], base)    
-
     self.__sound_victory = load_sound('victory.wav')
 
     self.__cursor = None
 
     self.__sell_button = None
     self.__upgrade_button = None
+    self.__game_over_button = None
 
     self.start_game()
 
   def start_game(self):
+    for sprite in self.__background_sprites:
+      sprite.kill()
+    for sprite in self.__widget_sprites:
+      sprite.kill()
+    for sprite in self.__enemy_sprites:
+      sprite.kill()
+    self.create_environment()
+
     self.__level = 0
     self.__funds = 10
     self.__lives = 10
@@ -1022,8 +1028,15 @@ class Game(object):
 
     self.regenerate_path()
 
+    self.__bases = [Base(self.__grid.grid_to_screen(self.__entry_grid_pos),
+                         self),
+                    Base(self.__grid.grid_to_screen(self.__exit_grid_pos),
+                         self, is_exit=True)]
+    for base in self.__bases:
+      self.__grid.set_cell(base.position[0], base.position[1], base)    
+
   def begin_level(self):
-    Banner.enqueue_message('Starting Level %d' % (self.__level + 1))
+    Banner.enqueue_message('Level %d' % (self.__level + 1))
     self.__level_multiplier = Game.LEVELS[self.__level][0]
     self.__level_enemy_lineup = Game.LEVELS[self.__level][1]
     self.__level_enemy_lineup_index = 0
@@ -1052,7 +1065,6 @@ class Game(object):
   def notify_enemy_sprite_change(self):
     if (len(self.__enemy_sprites.sprites()) == 0 and
         self.enemy_lineup_complete):
-      print 'level %d complete' % self.__level
       self.end_level()
 
   def deduct_life(self):
@@ -1126,13 +1138,13 @@ class Game(object):
   def generate_turret_buttons(self, turret):
     self.reset_turret_buttons()    
     col, row = self.__grid.screen_to_grid(turret.position)
-    center_position = self.__grid.grid_to_screen((col, row))
-    left_of_center = (center_position[0] - 20, center_position[1] - 8)
-    self.__sell_button = Button(left_of_center, self.__small_font, "Sell",
-                                lambda: self.remove_turret((col, row)))
-    right_of_center = (center_position[0] + 30, center_position[1] - 8)
-    self.__upgrade_button = Button(right_of_center, self.__small_font, "Upgrade",
-                                   lambda: self.upgrade_turret((col, row)))
+    c = self.__grid.grid_to_screen((col, row))
+    self.__sell_button = Button(self.__small_font, "Sell $%d" % turret.value,
+                                lambda: self.remove_turret((col, row)),
+                                center=(c[0] - 40, c[1]))
+    self.__upgrade_button = Button(self.__small_font, "Upgrade",
+                                   lambda: self.upgrade_turret((col, row)),
+                                   center=(c[0] + 40, c[1]))
 
   def handle_turret_button_clicks(self, pos):
     if self.__sell_button and self.__sell_button.rect.collidepoint(pos):
@@ -1143,10 +1155,24 @@ class Game(object):
       return True
     return False
 
+  def reset_game_over_button(self):
+    if self.__game_over_button:
+      self.__game_over_button.kill()
+      self.__game_over_button = None
+      
+  def handle_game_over_button_click(self, pos):
+    if self.__game_over_button and self.__game_over_button.rect.collidepoint(pos):
+      self.reset_game_over_button()
+      self.start_game()
+      return True
+    return False
+
   def handle_mouseup(self, pos):
     generated_turret_buttons = False
     try:
       if self.handle_turret_button_clicks(pos):
+        return
+      if self.handle_game_over_button_click(pos):
         return
       if self.__turret_menu.rect.collidepoint(pos):
         local_pos = (pos[0] - self.__turret_menu.rect.left,
@@ -1226,6 +1252,14 @@ class Game(object):
         self.begin_level()
     return False
 
+  def handle_game_over(self):
+    if Banner.current_banner:
+      Banner.current_banner.kill()
+      Banner.current_banner = None
+    self.__game_over_button = Button(self.__big_font, "Play Again",
+                                     lambda: self.start_game(),
+                                     center=(SCREEN_SIZE_X / 2, SCREEN_SIZE_Y / 2))
+
   def run(self):
     screen = pygame.display.set_mode((SCREEN_SIZE_X, SCREEN_SIZE_Y))
     background = pygame.image.load(os.path.join(ASSET_DIR, 'background.png'))
@@ -1256,9 +1290,11 @@ class Game(object):
       if self.__game_over:
         if not game_over:
           game_over = GameOver(self.__big_font)
-          if Banner.current_banner:
-            Banner.current_banner.kill()
-            Banner.current_banner = None
+          self.handle_game_over()
+      else:
+        if game_over:
+          game_over.kill()
+          game_over = None
 
       pygame.display.update(dirty)
 
